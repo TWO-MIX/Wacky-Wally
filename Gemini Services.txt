@@ -1,0 +1,36 @@
+# Gemini AI & API Integration: AI Space Planner
+
+This application leverages the Gemini API to transform static space planning into a dynamic, intelligent simulation. Below are the specific ways Gemini AI is utilized to enhance the user experience.
+
+## 1. Computer Vision: Sketch-to-Simulation
+**Model:** `gemini-3-flash-preview`
+**Feature:** Users can upload a photo of a hand-drawn floor plan or a rough digital sketch.
+**How it works:** Gemini Vision analyzes the image, identifies spatial elements (desks, meeting rooms, coffee stations, entrances, obstacles), and extracts their relative coordinates and labels.
+**User Benefit:** Eliminates the need for manual CAD-style data entry. Organisers can go from a "napkin sketch" to a functional simulation in seconds.
+
+## 2. Qualitative Analysis: The "Vibe Check"
+**Model:** `gemini-3.1-pro-preview`
+**Feature:** An "AI Insights" button that provides a critical review of the current layout.
+**How it works:** The app sends the current floor plan data, occupancy stats, and agent counts to Gemini. The model identifies potential "dead zones," social bottlenecks, or inefficient staff routes.
+**User Benefit:** Provides professional-grade spatial consulting instantly, helping organisers optimize for "vibe" and efficiency without needing a background in architecture.
+
+## 3. Natural Language Simulation Tuning: Environmental Factors
+**Model:** `gemini-3-flash-preview`
+**Feature:** A "Vibe" input field that changes the global state of the simulation.
+**How it works:** Users can type phrases like "Monday Morning Rush" or "Post-Lunch Slump." Gemini translates these abstract concepts into mathematical modifiers for agent movement speed, coffee desire, and social interaction probability.
+**User Benefit:** Allows organisers to test "what-if" scenarios using natural language instead of complex slider configurations.
+
+## 4. Persona Generation: Intelligent Agents
+**Model:** `gemini-3-flash-preview`
+**Feature:** Automated generation of diverse agent behaviors.
+**How it works:** When agents are added to the simulation, Gemini generates unique metrics for each persona (Participant, Organiser, Staff) including their walking speed, desk-focus frequency, and social tendencies.
+**User Benefit:** Creates a realistic, non-uniform crowd simulation that accurately reflects how different types of people use a space.
+
+## 5. Scenario-Specific Behavior: Hackathon Behavior Engine
+**Model:** `gemini-3.1-pro-preview`
+**Feature:** A specialized behavior prompt for event-specific phases.
+**How it works:** Users describe a specific moment (e.g., "The final 2 hours of the hackathon"). Gemini generates persona-specific multipliers (e.g., Participants get +50% Activity Level, Staff get +30% Movement Speed).
+**User Benefit:** Enables hyper-specific stress-testing of a space for the most critical moments of an event, ensuring resources (like pizza stations or meeting rooms) are positioned correctly for peak demand.
+
+---
+*Built with Gemini API for the AI Studio Hackathon.*

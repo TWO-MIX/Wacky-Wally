@@ -1,0 +1,38 @@
+# Genesis of the AI Space Planner
+
+## How Might We
+"How might we make space planning quick and easy for temporary event organisers so they can deploy resources to maximise occupancy and reduce travel time between spaces."
+
+## The Problem
+Temporary events (like hackathons, pop-ups, and conferences) often suffer from poor spatial layout because organisers lack the tools to "test" a space before people arrive. Traditional CAD tools are too slow, and manual planning doesn't account for human behavior, leading to bottlenecks at coffee stations, underutilized pods, or excessive travel times for staff.
+
+## The Solution: AI-Augmented Spatial Simulation
+We built a "Living Blueprint" that bridges the gap between a napkin sketch and a high-fidelity behavioral simulation.
+
+### Key Pillars of the Build:
+
+1. **Sketch-to-Simulation (Gemini Vision)**
+   - Organisers can upload a photo of a hand-drawn floor plan.
+   - The AI "digitizes" the sketch, identifying desks, meeting rooms, coffee stations, and obstacles.
+   - This removes the friction of manual data entry, making planning "quick and easy."
+
+2. **Persona-Based Agent Simulation**
+   - We defined three distinct personas: Participants (focused on desks/pods), Organisers (high mobility, frequent meetings), and Staff (operational focus).
+   - Each agent has unique metrics (Speed, Social Frequency, Coffee Desire) that drive their movement.
+
+3. **Dynamic AI Behavior Engine (Gemini Pro)**
+   - Instead of static rules, organisers can "prompt" the simulation.
+   - Examples: "The final 2 hours of the hackathon," "Pizza has just arrived," or "Early morning coffee rush."
+   - The AI translates these vibes into mathematical multipliers for the simulation, allowing organisers to stress-test the space for specific event phases.
+
+4. **Occupancy & Travel Analytics**
+   - Real-time heatmaps show where bottlenecks occur.
+   - Travel time metrics help organisers minimize the distance staff have to walk.
+   - Occupancy reports identify "dead zones" in the layout.
+
+5. **Scenario A/B Testing**
+   - Organisers can save different layouts and compare their performance metrics side-by-side.
+   - This data-driven approach ensures resources are deployed where they are needed most.
+
+## Impact
+By combining computer vision with behavioral AI, we've turned space planning from a guessing game into a predictable science, specifically tailored for the high-pressure, fast-changing environment of temporary events.
