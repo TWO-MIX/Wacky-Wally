@@ -1,0 +1,5 @@
+{
+  "name": "VibeSpace: Wacky Traffic Sim",
+  "description": "An AI-powered office space simulation tool that uses Gemini to generate agent behaviors and analyze spatial bottlenecks. [Checkpoint: Safespace1230]",
+  "requestFramePermissions": []
+}
