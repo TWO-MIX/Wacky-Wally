@@ -41,7 +41,9 @@ import {
   Tv,
   ZoomIn,
   ZoomOut,
-  Maximize
+  Maximize,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -103,6 +105,7 @@ export default function App() {
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const agentsRef = useRef<Agent[]>([]);
@@ -731,6 +734,56 @@ export default function App() {
 
   const hoveredAgent = agents.find(a => a.id === hoveredAgentId);
 
+  const requestSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedObjects = () => {
+    const filtered = objects.filter(o => !['entrance', 'obstacle', 'obstacle1', 'obstacle2'].includes(o.type));
+    if (!sortConfig) return filtered;
+
+    return [...filtered].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      const aUsage = objectUsage[a.id] || { totalTime: 0, visitCount: 0 };
+      const bUsage = objectUsage[b.id] || { totalTime: 0, visitCount: 0 };
+
+      switch (sortConfig.key) {
+        case 'label':
+          aValue = a.label;
+          bValue = b.label;
+          break;
+        case 'occupancy':
+          aValue = aUsage.totalTime;
+          bValue = bUsage.totalTime;
+          break;
+        case 'visits':
+          aValue = aUsage.visitCount;
+          bValue = bUsage.visitCount;
+          break;
+        case 'avgTime':
+          aValue = aUsage.visitCount > 0 ? aUsage.totalTime / aUsage.visitCount : 0;
+          bValue = bUsage.visitCount > 0 ? bUsage.totalTime / bUsage.visitCount : 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  };
+
   return (
     <div className="flex h-screen w-full bg-[#E4E3E0] text-[#141414] font-sans overflow-hidden relative">
       {/* Mobile Sidebar Overlay */}
@@ -965,14 +1018,46 @@ export default function App() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-stone-50 border-bottom border-[#141414]/5">
-                        <th className="p-3 font-bold uppercase tracking-tighter opacity-40">Space</th>
-                        <th className="p-3 font-bold uppercase tracking-tighter opacity-40">Total Occupancy</th>
-                        <th className="p-3 font-bold uppercase tracking-tighter opacity-40">Visits</th>
-                        <th className="p-3 font-bold uppercase tracking-tighter opacity-40">Avg. Time/Person</th>
+                        <th 
+                          className="p-3 font-bold uppercase tracking-tighter opacity-40 cursor-pointer hover:opacity-100 transition-opacity"
+                          onClick={() => requestSort('label')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Space
+                            {sortConfig?.key === 'label' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                          </div>
+                        </th>
+                        <th 
+                          className="p-3 font-bold uppercase tracking-tighter opacity-40 cursor-pointer hover:opacity-100 transition-opacity"
+                          onClick={() => requestSort('occupancy')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Total Occupancy
+                            {sortConfig?.key === 'occupancy' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                          </div>
+                        </th>
+                        <th 
+                          className="p-3 font-bold uppercase tracking-tighter opacity-40 cursor-pointer hover:opacity-100 transition-opacity"
+                          onClick={() => requestSort('visits')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Visits
+                            {sortConfig?.key === 'visits' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                          </div>
+                        </th>
+                        <th 
+                          className="p-3 font-bold uppercase tracking-tighter opacity-40 cursor-pointer hover:opacity-100 transition-opacity"
+                          onClick={() => requestSort('avgTime')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Avg. Time/Person
+                            {sortConfig?.key === 'avgTime' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {objects.filter(o => !['entrance', 'obstacle', 'obstacle1', 'obstacle2'].includes(o.type)).map(obj => {
+                      {getSortedObjects().map(obj => {
                         const usage = objectUsage[obj.id] || { totalTime: 0, visitCount: 0 };
                         const avgTime = usage.visitCount > 0 
                           ? (usage.totalTime / usage.visitCount).toFixed(1)

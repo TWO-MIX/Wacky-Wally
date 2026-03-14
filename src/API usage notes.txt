@@ -1,0 +1,30 @@
+The movement simulation in this application is implemented using custom client-side logic within a React useEffect hook, rather than an external "Movement API."
+
+Here is the breakdown of how it works:
+
+Rendering Engine: The app uses react-konva, which is a React wrapper for the HTML5 Canvas library Konva.js. This allows for high-performance rendering of many moving agents without the overhead of standard DOM elements.
+
+Simulation Loop: A requestAnimationFrame loop (managed via useEffect) runs at approximately 60 frames per second. In each "tick," the application calculates the new position of every agent.
+
+Movement Logic:
+- Pathfinding: Agents calculate vectors toward their current "goal" (e.g., a Desk or Coffee station).
+- Collision Avoidance: A simple steering behavior is used to prevent agents from overlapping too much and to navigate around "Obstacle" objects.
+- State Machine: Each agent has a status (e.g., working, wandering, seeking_coffee) that dictates their target destination and speed.
+
+AI Integration: While the movement is calculated locally, the Gemini API (via the @google/genai SDK) is used to:
+- Generate unique Personas (names, roles, and wacky behaviors).
+- Analyze the Space to provide "Vibe Checks" and layout optimization suggestions.
+- Digitize Sketches by interpreting uploaded images of floor plans.
+
+In summary: Konva.js handles the drawing, React handles the state, and Custom JavaScript handles the physics/movement logic.
+
+Does it use API credits?
+The movement simulation itself (the agents moving around the canvas, pathfinding, and collision avoidance) runs entirely on your local computer's processor within the browser. It does not call any external servers or use any API credits to function.
+
+However, the application does use the Gemini API (which would use credits/quota) for the "intelligent" features:
+- Spawning AI Personas: When you click the brain icon to generate a unique character.
+- AI Behavior: When you type a prompt (like "everyone is rushing for pizza") and click "Apply AI Behavior."
+- Vibe Check: When the AI analyzes your layout to give you feedback.
+- Digitize Sketch: When you upload a drawing and the AI converts it into space objects.
+
+In short: You can leave the simulation running for hours, and it won't cost a single API credit. You only "spend" credits when you ask the AI to generate content or analyze the space.
