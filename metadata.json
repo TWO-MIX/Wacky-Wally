@@ -1,5 +1,5 @@
 {
-  "name": "VibeSpace: Wacky Traffic Sim",
-  "description": "An AI-powered office space simulation tool that uses Gemini to generate agent behaviors and analyze spatial bottlenecks. [Checkpoint: Safespace1230]",
-  "requestFramePermissions": []
+  "name": "Genesis: AI Space Planner",
+  "description": "AI-augmented spatial simulation for temporary events. Sketch-to-simulation, persona-based agents, and dynamic behavior tuning powered by Gemini.",
+  "requestFramePermissions": ["camera"]
 }

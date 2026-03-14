@@ -1,0 +1,23 @@
+The logic behind the alphabetical suffixes is designed to be both simple and scalable. Here is a breakdown of how it works in the code:
+
+1. Type-Specific Counting
+When you click to add an object (e.g., a "Desk"), the system first filters the existing layout to see how many objects of that exact same type already exist. This ensures that your Desk count doesn't interfere with your Coffee count.
+
+2. Character Mapping (The "A-Z" Logic)
+We use the standard character encoding (ASCII/Unicode) where the number 65 represents the capital letter 'A'.
+* Calculation: 65 + (existingCount % 26)
+* If you have 0 desks, it calculates 65 + 0 = 65 ('A').
+* If you have 1 desk, it calculates 65 + 1 = 66 ('B').
+* The % 26 (modulo) ensures that if you reach the 27th desk, the letter "wraps around" back to 'A'.
+
+3. Overflow Handling (Beyond 26 Objects)
+To prevent duplicate names when you have a very large event space, I added a "cycle" prefix:
+* Logic: Math.floor(existingCount / 26) + 1
+* Result:
+    * Objects 1–26: A, B, C... Z
+    * Objects 27–52: 1A, 1B, 1C... 1Z
+    * Objects 53–78: 2A, 2B, 2C... 2Z
+
+Why this is useful:
+* Referencing: In the AI Vibe Check and Full Report, the AI can now say "Desk C is a bottleneck" instead of just "a desk," making the insights much more precise.
+* Organization: It gives your layout a professional, "blueprint" feel immediately upon placement.

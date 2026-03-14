@@ -35,7 +35,11 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Scale,
-  Box
+  Box,
+  Tv,
+  ZoomIn,
+  ZoomOut,
+  Maximize
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -52,10 +56,21 @@ const INITIAL_OBJECTS: SpaceObject[] = [
   { id: 'desk-2', type: 'desk', x: 200, y: 250, width: 80, height: 50, label: 'Desk B', color: '#3b82f6' },
   { id: 'coffee-1', type: 'coffee', x: 500, y: 50, width: 60, height: 60, label: 'Coffee', color: '#f59e0b' },
   { id: 'meeting-1', type: 'meeting', x: 450, y: 300, width: 150, height: 100, label: 'Meeting Room', color: '#8b5cf6' },
+  { id: 'toilet-1', type: 'toilet', x: 50, y: 500, width: 50, height: 50, label: 'Toilet', color: '#94a3b8' },
+  { id: 'pizza-1', type: 'pizza', x: 650, y: 50, width: 60, height: 60, label: 'Pizza', color: '#ef4444' },
+  { id: 'pod-1', type: 'pod', x: 650, y: 450, width: 50, height: 50, label: 'Focus Pod', color: '#06b6d4' },
 ];
 
+const STORAGE_KEYS = {
+  OBJECTS: 'vibespace_objects',
+  LOCATION: 'vibespace_location'
+};
+
 export default function App() {
-  const [objects, setObjects] = useState<SpaceObject[]>(INITIAL_OBJECTS);
+  const [objects, setObjects] = useState<SpaceObject[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.OBJECTS);
+    return saved ? JSON.parse(saved) : INITIAL_OBJECTS;
+  });
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [wackyFactor, setWackyFactor] = useState(5);
@@ -71,8 +86,11 @@ export default function App() {
   const [scenarioB, setScenarioB] = useState<ScenarioReport | null>(null);
   const [heatmapMax, setHeatmapMax] = useState(1);
   const [heatmapData, setHeatmapData] = useState<number[][]>([]);
+  const [heatmapImage, setHeatmapImage] = useState<string | null>(null);
   const [objectUsage, setObjectUsage] = useState<Record<string, { totalTime: number; visitCount: number }>>({});
-  const [location, setLocation] = useState("San Francisco, CA");
+  const [location, setLocation] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.LOCATION) || "San Francisco, CA";
+  });
   const [startTime, setStartTime] = useState("08:00");
   const [envFactors, setEnvFactors] = useState<EnvironmentalFactors | null>(null);
   const [isUpdatingEnv, setIsUpdatingEnv] = useState(false);
@@ -81,8 +99,85 @@ export default function App() {
   const [isAnalyzingBehavior, setIsAnalyzingBehavior] = useState(false);
   const [behaviorInput, setBehaviorInput] = useState("");
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const agentsRef = useRef<Agent[]>([]);
+  const objectsRef = useRef(objects);
+  const wackyFactorRef = useRef(wackyFactor);
+  const timeDilationRef = useRef(timeDilation);
+  const envFactorsRef = useRef(envFactors);
+  const hackathonBehaviorRef = useRef(hackathonBehavior);
+  const lastTickRef = useRef<number>(0);
+
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
+
+  useEffect(() => { objectsRef.current = objects; }, [objects]);
+  useEffect(() => { wackyFactorRef.current = wackyFactor; }, [wackyFactor]);
+  useEffect(() => { timeDilationRef.current = timeDilation; }, [timeDilation]);
+  useEffect(() => { envFactorsRef.current = envFactors; }, [envFactors]);
+  useEffect(() => { hackathonBehaviorRef.current = hackathonBehavior; }, [hackathonBehavior]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.OBJECTS, JSON.stringify(objects));
+  }, [objects]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.LOCATION, location);
+  }, [location]);
+
+  const generateHeatmapImage = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Background
+    ctx.fillStyle = '#E4E3E0';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Subtle Grid
+    ctx.strokeStyle = '#141414';
+    ctx.globalAlpha = 0.05;
+    for (let x = 0; x <= canvas.width; x += 50) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y <= canvas.height; y += 50) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1.0;
+
+    // Objects
+    objects.forEach(obj => {
+      ctx.fillStyle = obj.color;
+      ctx.globalAlpha = 0.2;
+      ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+      ctx.globalAlpha = 1.0;
+      ctx.strokeStyle = obj.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+      
+      ctx.fillStyle = '#141414';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText(obj.label.toUpperCase(), obj.x + 5, obj.y + 15);
+    });
+
+    // Heatmap
+    heatmapData.forEach((row, i) => {
+      row.forEach((val, j) => {
+        if (val > 0) {
+          const opacity = Math.min(0.8, (val / heatmapMax) * 0.8);
+          ctx.fillStyle = `rgba(239, 68, 68, ${opacity})`;
+          ctx.fillRect(j * 20, i * 20, 20, 20);
+        }
+      });
+    });
+
+    return canvas.toDataURL();
+  };
 
   // Initialize heatmap grid
   useEffect(() => {
@@ -132,12 +227,19 @@ export default function App() {
 
   // Simulation Loop
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning) {
+      lastTickRef.current = 0;
+      return;
+    }
 
+    lastTickRef.current = performance.now();
     const interval = setInterval(() => {
-      // Increment simulated time based on dilation
-      // 16ms real time = (16 * timeDilation / 1000) simulated seconds
-      const simSecondsPerFrame = (16 * timeDilation) / 1000;
+      const now = performance.now();
+      const realElapsedMs = lastTickRef.current === 0 ? 16 : now - lastTickRef.current;
+      lastTickRef.current = now;
+
+      const currentDilation = timeDilationRef.current;
+      const simSecondsPerFrame = (realElapsedMs * currentDilation) / 1000;
       
       setSimulatedSeconds(prev => {
         const next = prev + simSecondsPerFrame;
@@ -148,11 +250,11 @@ export default function App() {
         return next;
       });
 
-      // Update Heatmap and Usage
+      // Update Heatmap
       setHeatmapData(prev => {
         const newData = [...prev.map(row => [...row])];
         let currentMax = heatmapMax;
-        agents.forEach(agent => {
+        agentsRef.current.forEach(agent => {
           const col = Math.floor(agent.x / 20);
           const row = Math.floor(agent.y / 20);
           if (row >= 0 && row < newData.length && col >= 0 && col < newData[0].length) {
@@ -164,180 +266,183 @@ export default function App() {
         return newData;
       });
 
-      setObjectUsage(prev => {
-        const next = { ...prev };
-        agents.forEach(agent => {
-          if (agent.status === 'working' && agent.currentGoalId) {
-            const current = next[agent.currentGoalId] || { totalTime: 0, visitCount: 0 };
-            next[agent.currentGoalId] = {
-              ...current,
-              totalTime: current.totalTime + simSecondsPerFrame
+      // Update Agents and Usage
+      setAgents(prevAgents => {
+        const usageDelta: Record<string, { totalTime: number; visitCount: number }> = {};
+        const currentObjects = objectsRef.current;
+        const currentBehavior = hackathonBehaviorRef.current;
+        const currentEnv = envFactorsRef.current;
+        const currentWacky = wackyFactorRef.current;
+
+        const nextAgents = prevAgents.map(agent => {
+          // 1. If waiting, decrement wait time
+          if (agent.waitTime > 0) {
+            const waitDecrement = (currentDilation / 20) * (realElapsedMs / 16);
+            const newWaitTime = Math.max(0, agent.waitTime - waitDecrement);
+            
+            if (agent.currentGoalId) {
+              if (!usageDelta[agent.currentGoalId]) usageDelta[agent.currentGoalId] = { totalTime: 0, visitCount: 0 };
+              usageDelta[agent.currentGoalId].totalTime += simSecondsPerFrame;
+            }
+            
+            return { ...agent, waitTime: newWaitTime, status: 'working' as const };
+          }
+
+          const dx = agent.targetX - agent.x;
+          const dy = agent.targetY - agent.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          const behaviorMods = currentBehavior?.modifiers[agent.role];
+          const speedMultiplier = (currentDilation / 20) * (currentEnv?.modifiers.movementSpeed || 1) * (behaviorMods?.movementSpeed || 1);
+          const currentSpeed = agent.speed * speedMultiplier;
+          
+          // 2. Reached target - start working/waiting
+          const detectionRadius = Math.max(10, currentSpeed * 1.5);
+
+          if (distance < detectionRadius && agent.status === 'walking') {
+            const activityMultiplier = behaviorMods?.activityLevel || 1;
+            const baseWait = 100 + (10 - Math.min(10, agent.metrics.activityLevel * activityMultiplier)) * 50;
+            const waitTime = Math.floor(baseWait * (0.5 + Math.random()));
+            
+            if (agent.currentGoalId) {
+              if (!usageDelta[agent.currentGoalId]) usageDelta[agent.currentGoalId] = { totalTime: 0, visitCount: 0 };
+              usageDelta[agent.currentGoalId].visitCount += 1;
+            }
+            
+            return { 
+              ...agent, 
+              x: agent.targetX, 
+              y: agent.targetY, 
+              waitTime, 
+              status: 'working' as const 
             };
           }
-        });
-        return next;
-      });
 
-      setAgents(prev => prev.map(agent => {
-        // 1. If waiting, decrement wait time
-        if (agent.waitTime > 0) {
-          return { ...agent, waitTime: agent.waitTime - (timeDilation / 20), status: 'working' };
-        }
+          // 3. Finished working - pick next target
+          if (agent.status === 'working' && agent.waitTime <= 0) {
+            const rand = Math.random();
+            let targetType: ObjectType = 'desk';
+            
+            const deskWeight = agent.metrics.deskFrequency * (behaviorMods?.deskPreference || 1);
+            const coffeeWeight = agent.metrics.coffeeFrequency * (currentEnv?.modifiers.coffeeDesire || 1);
+            const socialWeight = agent.metrics.meetingFrequency * (currentEnv?.modifiers.socialProbability || 1) * (behaviorMods?.meetingPreference || 1);
+            const pizzaWeight = 0.1 * (behaviorMods?.pizzaPreference || 1);
+            const podWeight = 0.1 * (behaviorMods?.podPreference || 1);
+            const stageWeight = socialWeight * 0.5;
+            const atriumWeight = socialWeight * 0.3;
+            
+            const totalWeight = deskWeight + coffeeWeight + socialWeight + pizzaWeight + atriumWeight + podWeight + stageWeight;
+            const normalizedRoll = rand * totalWeight;
 
-        const dx = agent.targetX - agent.x;
-        const dy = agent.targetY - agent.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+            if (normalizedRoll < 0.05) targetType = 'toilet'; 
+            else if (normalizedRoll < 0.1) targetType = 'pod';
+            else if (normalizedRoll < deskWeight) targetType = 'desk';
+            else if (normalizedRoll < deskWeight + coffeeWeight) targetType = 'coffee';
+            else if (normalizedRoll < deskWeight + coffeeWeight + pizzaWeight) targetType = 'pizza';
+            else if (normalizedRoll < deskWeight + coffeeWeight + pizzaWeight + socialWeight) targetType = 'meeting';
+            else if (normalizedRoll < deskWeight + coffeeWeight + pizzaWeight + socialWeight + stageWeight) targetType = 'stage';
+            else if (normalizedRoll < deskWeight + coffeeWeight + pizzaWeight + socialWeight + stageWeight + atriumWeight) targetType = 'atrium';
+            else targetType = 'entrance';
 
-        // 2. Reached target - start working/waiting
-        if (distance < 5 && agent.status === 'walking') {
-          // Activity level determines how long they stay (higher activity = shorter stay)
-          const activityMultiplier = hackathonBehavior?.modifiers[agent.role]?.activityLevel || 1;
-          const baseWait = 100 + (10 - Math.min(10, agent.metrics.activityLevel * activityMultiplier)) * 50;
-          const waitTime = Math.floor(baseWait * (0.5 + Math.random()));
-          
-          if (agent.currentGoalId) {
-            setObjectUsage(prev => ({
-              ...prev,
-              [agent.currentGoalId!]: {
-                totalTime: (prev[agent.currentGoalId!]?.totalTime || 0),
-                visitCount: (prev[agent.currentGoalId!]?.visitCount || 0) + 1
+            const getAvailableTarget = (type: ObjectType) => {
+              const possibleTargets = currentObjects.filter(o => o.type === type);
+              if (possibleTargets.length === 0) return null;
+
+              const availableTargets = possibleTargets.filter(obj => {
+                if (obj.type !== 'desk' && obj.type !== 'meeting' && obj.type !== 'toilet' && obj.type !== 'pod' && obj.type !== 'stage') return true;
+                let capacity = 1;
+                if (obj.type === 'desk') capacity = 4;
+                else if (obj.type === 'meeting') capacity = 8;
+                else if (obj.type === 'toilet') capacity = 1;
+                else if (obj.type === 'pod') capacity = 1;
+                else if (obj.type === 'stage') capacity = 12;
+                
+                const currentOccupants = prevAgents.filter(a => a.currentGoalId === obj.id && a.status === 'working').length;
+                return currentOccupants < capacity;
+              });
+
+              if (availableTargets.length > 0) return availableTargets[Math.floor(Math.random() * availableTargets.length)];
+              return null;
+            };
+
+            let nextObj = getAvailableTarget(targetType);
+            if (!nextObj) {
+              const fallbackTypes: ObjectType[] = ['desk', 'coffee', 'meeting', 'atrium', 'entrance'];
+              for (const fallback of fallbackTypes) {
+                nextObj = getAvailableTarget(fallback);
+                if (nextObj) break;
               }
-            }));
-          }
-          
-          return { ...agent, waitTime, status: 'working' };
-        }
-
-        // 3. Finished working - pick next target
-        if (distance < 5 && agent.status === 'working') {
-          const rand = Math.random();
-          let targetType: ObjectType = 'desk';
-          
-          const behaviorMods = hackathonBehavior?.modifiers[agent.role];
-          const deskWeight = agent.metrics.deskFrequency * (behaviorMods?.deskPreference || 1);
-          const coffeeWeight = agent.metrics.coffeeFrequency * (envFactors?.modifiers.coffeeDesire || 1);
-          const socialWeight = agent.metrics.meetingFrequency * (envFactors?.modifiers.socialProbability || 1) * (behaviorMods?.meetingPreference || 1);
-          const pizzaWeight = 0.1 * (behaviorMods?.pizzaPreference || 1);
-          const podWeight = 0.1 * (behaviorMods?.podPreference || 1);
-          const atriumWeight = socialWeight * 0.3; // Atrium is a special social spot
-          
-          const totalWeight = deskWeight + coffeeWeight + socialWeight + pizzaWeight + atriumWeight + podWeight;
-          const normalizedRoll = rand * totalWeight;
-
-          if (normalizedRoll < 0.05) targetType = 'toilet'; 
-          else if (normalizedRoll < 0.1) targetType = 'pod';
-          else if (normalizedRoll < deskWeight) targetType = 'desk';
-          else if (normalizedRoll < deskWeight + coffeeWeight) targetType = 'coffee';
-          else if (normalizedRoll < deskWeight + coffeeWeight + pizzaWeight) targetType = 'pizza';
-          else if (normalizedRoll < deskWeight + coffeeWeight + pizzaWeight + socialWeight) targetType = 'meeting';
-          else if (normalizedRoll < deskWeight + coffeeWeight + pizzaWeight + socialWeight + atriumWeight) targetType = 'atrium';
-          else targetType = 'entrance';
-
-          // Check if target type exists, fallback to random if not
-          const getAvailableTarget = (type: ObjectType) => {
-            const possibleTargets = objects.filter(o => o.type === type);
-            if (possibleTargets.length === 0) return null;
-
-            // Filter by capacity if applicable
-            const availableTargets = possibleTargets.filter(obj => {
-              if (obj.type !== 'desk' && obj.type !== 'meeting' && obj.type !== 'toilet' && obj.type !== 'pod') return true;
-              let capacity = 1;
-              if (obj.type === 'desk') capacity = 4;
-              else if (obj.type === 'meeting') capacity = 8;
-              else if (obj.type === 'toilet') capacity = 1;
-              else if (obj.type === 'pod') capacity = 1;
-              
-              const currentOccupants = agents.filter(a => a.currentGoalId === obj.id && a.status === 'working').length;
-              return currentOccupants < capacity;
-            });
-
-            if (availableTargets.length > 0) {
-              return availableTargets[Math.floor(Math.random() * availableTargets.length)];
             }
-            return null;
+            if (!nextObj) nextObj = currentObjects[Math.floor(Math.random() * currentObjects.length)];
+
+            return {
+              ...agent,
+              targetX: nextObj.x + nextObj.width / 2,
+              targetY: nextObj.height / 2 + nextObj.y,
+              currentGoalId: nextObj.id,
+              status: 'walking' as const
+            };
+          }
+
+          // 4. Movement logic
+          const vx = (dx / distance) * currentSpeed;
+          const vy = (dy / distance) * currentSpeed;
+
+          let jitterX = 0;
+          let jitterY = 0;
+          if (currentWacky > 5 && Math.random() < (currentWacky / 100)) {
+            jitterX = (Math.random() - 0.5) * currentWacky * 2;
+            jitterY = (Math.random() - 0.5) * currentWacky * 2;
+          }
+
+          const isColliding = (x: number, y: number) => {
+            return currentObjects.some(obj => {
+              if (obj.type !== 'obstacle1' && obj.type !== 'obstacle2' && obj.type !== 'obstacle') return false;
+              const radius = 10;
+              return x + radius > obj.x && x - radius < obj.x + obj.width &&
+                     y + radius > obj.y && y - radius < obj.y + obj.height;
+            });
           };
 
-          let nextObj = getAvailableTarget(targetType);
-          
-          // If preferred target is full or doesn't exist, try other types in order of priority
-          if (!nextObj) {
-            const fallbackTypes: ObjectType[] = ['desk', 'coffee', 'meeting', 'atrium', 'entrance'];
-            for (const fallback of fallbackTypes) {
-              nextObj = getAvailableTarget(fallback);
-              if (nextObj) break;
-            }
-          }
+          let nextX = agent.x + vx + jitterX;
+          let nextY = agent.y + vy + jitterY;
 
-          // Ultimate fallback to any object if still nothing found
-          if (!nextObj) {
-            nextObj = objects[Math.floor(Math.random() * objects.length)];
+          if (isColliding(nextX, nextY)) {
+            if (!isColliding(nextX, agent.y)) nextY = agent.y;
+            else if (!isColliding(agent.x, nextY)) nextX = agent.x;
+            else { nextX = agent.x; nextY = agent.y; }
           }
 
           return {
             ...agent,
-            targetX: nextObj.x + nextObj.width / 2,
-            targetY: nextObj.height / 2 + nextObj.y,
-            currentGoalId: nextObj.id,
-            status: 'walking'
+            x: nextX,
+            y: nextY,
+            status: 'walking' as const,
+            travelTime: (agent.travelTime || 0) + simSecondsPerFrame
           };
-        }
+        });
 
-        // 4. Movement logic
-        const behaviorMods = hackathonBehavior?.modifiers[agent.role];
-        const speedMultiplier = (timeDilation / 20) * (envFactors?.modifiers.movementSpeed || 1) * (behaviorMods?.movementSpeed || 1);
-        const vx = (dx / distance) * agent.speed * speedMultiplier;
-        const vy = (dy / distance) * agent.speed * speedMultiplier;
-
-        // Wacky Jitter
-        let jitterX = 0;
-        let jitterY = 0;
-        if (wackyFactor > 5 && Math.random() < (wackyFactor / 100)) {
-          jitterX = (Math.random() - 0.5) * wackyFactor * 2;
-          jitterY = (Math.random() - 0.5) * wackyFactor * 2;
-        }
-
-        // Collision detection with obstacles
-        const isColliding = (x: number, y: number) => {
-          return objects.some(obj => {
-            if (obj.type !== 'obstacle1' && obj.type !== 'obstacle2' && obj.type !== 'obstacle') return false;
-            // Simple rect-circle check (using agent radius 10)
-            const radius = 10;
-            return x + radius > obj.x && x - radius < obj.x + obj.width &&
-                   y + radius > obj.y && y - radius < obj.y + obj.height;
+        // Apply usage deltas
+        if (Object.keys(usageDelta).length > 0) {
+          setObjectUsage(prev => {
+            const next = { ...prev };
+            Object.entries(usageDelta).forEach(([id, delta]) => {
+              const current = next[id] || { totalTime: 0, visitCount: 0 };
+              next[id] = {
+                totalTime: current.totalTime + delta.totalTime,
+                visitCount: current.visitCount + delta.visitCount
+              };
+            });
+            return next;
           });
-        };
-
-        let nextX = agent.x + vx + jitterX;
-        let nextY = agent.y + vy + jitterY;
-
-        if (isColliding(nextX, nextY)) {
-          // Try sliding along X
-          if (!isColliding(nextX, agent.y)) {
-            nextY = agent.y;
-          } 
-          // Try sliding along Y
-          else if (!isColliding(agent.x, nextY)) {
-            nextX = agent.x;
-          }
-          // Both blocked, don't move
-          else {
-            nextX = agent.x;
-            nextY = agent.y;
-          }
         }
 
-        return {
-          ...agent,
-          x: nextX,
-          y: nextY,
-          status: 'walking',
-          travelTime: (agent.travelTime || 0) + simSecondsPerFrame
-        };
-      }));
+        return nextAgents;
+      });
     }, 16);
 
     return () => clearInterval(interval);
-  }, [isRunning, objects, wackyFactor, timeDilation, agents, heatmapMax, envFactors]);
+  }, [isRunning, heatmapMax]);
 
   const spawnAgent = async (role: AgentRole, isAI = false) => {
     const entrance = objects.find(o => o.type === 'entrance') || objects[0];
@@ -393,18 +498,25 @@ export default function App() {
   };
 
   const addObject = (type: ObjectType) => {
+    const existingCount = objects.filter(o => o.type === type).length;
+    const suffix = String.fromCharCode(65 + (existingCount % 26));
+    const labelWithSuffix = existingCount >= 26 
+      ? `${Math.floor(existingCount / 26) + 1}${suffix}` 
+      : suffix;
+
     const config = {
-      desk: { width: 80, height: 50, color: '#3b82f6', label: 'Desk' },
-      coffee: { width: 60, height: 60, color: '#f59e0b', label: 'Coffee' },
-      meeting: { width: 150, height: 100, color: '#8b5cf6', label: 'Meeting' },
-      entrance: { width: 60, height: 40, color: '#10b981', label: 'Entrance' },
-      printer: { width: 40, height: 40, color: '#64748b', label: 'Printer' },
-      obstacle1: { width: 100, height: 20, color: '#ef4444', label: 'Wall-H' },
-      obstacle2: { width: 20, height: 100, color: '#ef4444', label: 'Wall-V' },
-      toilet: { width: 50, height: 50, color: '#06b6d4', label: 'Toilet' },
-      pizza: { width: 60, height: 60, color: '#f97316', label: 'Pizza' },
-      atrium: { width: 250, height: 150, color: '#ec4899', label: 'Atrium' },
-      pod: { width: 50, height: 50, color: '#6366f1', label: 'Pod' },
+      desk: { width: 80, height: 50, color: '#3b82f6', label: `Desk ${labelWithSuffix}` },
+      coffee: { width: 60, height: 60, color: '#f59e0b', label: `Coffee ${labelWithSuffix}` },
+      meeting: { width: 150, height: 100, color: '#8b5cf6', label: `Meeting ${labelWithSuffix}` },
+      entrance: { width: 60, height: 40, color: '#10b981', label: `Entrance ${labelWithSuffix}` },
+      printer: { width: 40, height: 40, color: '#64748b', label: `Printer ${labelWithSuffix}` },
+      obstacle1: { width: 100, height: 20, color: '#ef4444', label: `Wall-H ${labelWithSuffix}` },
+      obstacle2: { width: 20, height: 100, color: '#ef4444', label: `Wall-V ${labelWithSuffix}` },
+      toilet: { width: 50, height: 50, color: '#06b6d4', label: `Toilet ${labelWithSuffix}` },
+      pizza: { width: 60, height: 60, color: '#f97316', label: `Pizza ${labelWithSuffix}` },
+      atrium: { width: 250, height: 150, color: '#ec4899', label: `Atrium ${labelWithSuffix}` },
+      pod: { width: 50, height: 50, color: '#6366f1', label: `Pod ${labelWithSuffix}` },
+      stage: { width: 200, height: 120, color: '#4f46e5', label: `Stage ${labelWithSuffix}` },
     }[type];
 
     const newObj: SpaceObject = {
@@ -451,7 +563,18 @@ export default function App() {
   const runVibeCheck = async () => {
     setIsAnalyzing(true);
     try {
-      const result = await analyzeSpace(objects, agents.length, objectUsage);
+      const totalTravelTime = agents.reduce((sum, a) => sum + (a.travelTime || 0), 0);
+      const totalActiveTime = Object.values(objectUsage).reduce((sum, u) => sum + u.totalTime, 0);
+      
+      const stats = {
+        agentCount: agents.length,
+        totalTravelTime,
+        totalActiveTime,
+        usage: objectUsage,
+        simulatedSeconds
+      };
+
+      const result = await analyzeSpace(objects, stats);
       setAnalysis(result);
     } catch (error) {
       console.error("Analysis failed", error);
@@ -526,6 +649,7 @@ export default function App() {
             case 'pizza': width = 60; height = 60; color = '#f97316'; break;
             case 'atrium': width = 250; height = 150; color = '#ec4899'; break;
             case 'pod': width = 50; height = 50; color = '#6366f1'; break;
+            case 'stage': width = 200; height = 120; color = '#4f46e5'; break;
             case 'obstacle1': width = 60; height = 10; color = '#141414'; break;
             case 'obstacle2': width = 10; height = 60; color = '#141414'; break;
           }
@@ -565,6 +689,10 @@ export default function App() {
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
 
+    // Adjust pointer position for zoom level to match object coordinates
+    const adjustedX = pointerPos.x / zoom;
+    const adjustedY = pointerPos.y / zoom;
+
     // Update mouse position for the UI card (relative to viewport)
     const containerRect = containerRef.current?.getBoundingClientRect();
     if (containerRect) {
@@ -574,11 +702,11 @@ export default function App() {
       });
     }
 
-    // Find agent under mouse
+    // Find agent under mouse using adjusted coordinates
     const hovered = agents.find(agent => {
-      const dx = agent.x - pointerPos.x;
-      const dy = agent.y - pointerPos.y;
-      return Math.sqrt(dx * dx + dy * dy) < 15; // Detection radius
+      const dx = agent.x - adjustedX;
+      const dy = agent.y - adjustedY;
+      return Math.sqrt(dx * dx + dy * dy) < 15 / zoom; // Detection radius also scales
     });
 
     setHoveredAgentId(hovered?.id || null);
@@ -622,6 +750,28 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Heatmap Visualization */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  <h4 className="text-[10px] uppercase font-bold tracking-widest opacity-40">Space Heatmap (Occupancy Density)</h4>
+                </div>
+                <div className="bg-white p-2 rounded-2xl border border-[#141414]/5 shadow-inner overflow-hidden">
+                  {heatmapImage ? (
+                    <img 
+                      src={heatmapImage} 
+                      alt="Space Heatmap" 
+                      className="w-full h-auto rounded-xl"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="aspect-video bg-stone-100 flex items-center justify-center text-[10px] uppercase font-bold opacity-30">
+                      Generating Heatmap...
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* AI Diagnosis */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -633,9 +783,19 @@ export default function App() {
                     <Sparkles className="w-12 h-12" />
                   </div>
                   {analysis ? (
-                    <p className="text-sm leading-relaxed italic font-medium relative z-10">
-                      "{analysis}"
-                    </p>
+                    <div className="space-y-4 relative z-10">
+                      <p className="text-sm leading-relaxed italic font-medium">
+                        "{analysis}"
+                      </p>
+                      <button 
+                        onClick={runVibeCheck}
+                        disabled={isAnalyzing}
+                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[9px] font-bold uppercase flex items-center gap-2 transition-all border border-white/10"
+                      >
+                        {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        Re-run Analysis
+                      </button>
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center gap-3 py-4 opacity-50">
                       <p className="text-xs">No analysis generated yet.</p>
@@ -839,9 +999,28 @@ export default function App() {
             <div className="flex justify-between items-end">
               <h2 className="text-[10px] font-bold uppercase tracking-widest opacity-40">Simulation Controls</h2>
               <div className="text-right">
-                <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Current Time ({timeDilation}x)</p>
+                <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Current Time</p>
                 <p className="text-xl font-mono font-bold tabular-nums">{formatSimTime(simulatedSeconds)}</p>
               </div>
+            </div>
+
+            {/* Simulation Speed (Moved to top) */}
+            <div className="space-y-2 p-3 bg-stone-50 rounded-xl border border-[#141414]/5">
+              <div className="flex justify-between items-center">
+                <h2 className="text-[9px] font-bold uppercase tracking-widest opacity-40">Time Dilation</h2>
+                <span className="font-mono text-xs font-bold">{timeDilation}x</span>
+              </div>
+              <input 
+                type="range" 
+                min="1" 
+                max="480" 
+                value={timeDilation}
+                onChange={(e) => setTimeDilation(parseInt(e.target.value))}
+                className="w-full h-1 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-[#141414]"
+              />
+              <p className="text-[8px] opacity-50 italic text-right">
+                {timeDilation === 480 ? "8 hours in 1 minute" : `${timeDilation}x real-time speed`}
+              </p>
             </div>
             
             <div className="flex gap-2">
@@ -859,10 +1038,24 @@ export default function App() {
               </button>
               <button 
                 onClick={resetSimulation}
-                className="px-4 bg-white border border-[#141414] rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                className="px-4 bg-white border border-[#141414]/10 rounded-xl hover:bg-stone-100 transition-all"
                 title="Reset Simulation"
               >
                 <Trash2 className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => {
+                  if (confirm('Reset layout to default? This will clear your current space palette.')) {
+                    setObjects(INITIAL_OBJECTS);
+                    setLocation("San Francisco, CA");
+                    localStorage.removeItem(STORAGE_KEYS.OBJECTS);
+                    localStorage.removeItem(STORAGE_KEYS.LOCATION);
+                  }
+                }}
+                className="px-4 bg-white border border-[#141414]/10 rounded-xl hover:bg-stone-100 transition-all"
+                title="Reset Layout to Default"
+              >
+                <Box className="w-4 h-4" />
               </button>
             </div>
           </section>
@@ -1000,25 +1193,6 @@ export default function App() {
             )}
           </section>
 
-          {/* Simulation Speed */}
-          <section className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-[10px] font-bold uppercase tracking-widest opacity-40">Time Dilation</h2>
-              <span className="font-mono text-sm font-bold">{timeDilation}x</span>
-            </div>
-            <input 
-              type="range" 
-              min="1" 
-              max="480" 
-              value={timeDilation}
-              onChange={(e) => setTimeDilation(parseInt(e.target.value))}
-              className="w-full h-1 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-[#141414]"
-            />
-            <p className="text-[9px] opacity-50 italic">
-              {timeDilation === 480 ? "8 hours in 1 minute" : `${timeDilation}x real-time speed`}
-            </p>
-          </section>
-
           {/* Wacky Factor */}
           <section className="space-y-4">
             <div className="flex justify-between items-center">
@@ -1108,7 +1282,10 @@ export default function App() {
               <h2 className="text-[10px] font-bold uppercase tracking-widest opacity-40">Analytics</h2>
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => setShowReport(true)}
+                  onClick={() => {
+                    setHeatmapImage(generateHeatmapImage());
+                    setShowReport(true);
+                  }}
                   className="px-2 py-1 rounded-md bg-stone-200 text-[#141414]/40 hover:text-[#141414] transition-all text-[9px] font-bold uppercase tracking-tighter flex items-center gap-1"
                 >
                   <Briefcase className="w-3 h-3" />
@@ -1181,6 +1358,7 @@ export default function App() {
                 { type: 'toilet', icon: Bath, label: 'Toilet' },
                 { type: 'pod', icon: Box, label: 'Pod' },
                 { type: 'pizza', icon: Pizza, label: 'Pizza' },
+                { type: 'stage', icon: Tv, label: 'Stage' },
                 { type: 'atrium', icon: Mic, label: 'Atrium' },
                 { type: 'obstacle1', icon: Minus, label: 'Wall-H' },
                 { type: 'obstacle2', icon: MoreVertical, label: 'Wall-V' },
@@ -1200,21 +1378,75 @@ export default function App() {
         </div>
 
         <div className="p-6 border-t border-[#141414]/10 bg-stone-50">
-          <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center justify-between text-xs mb-4">
             <span className="opacity-50 font-bold uppercase tracking-tighter">Active Agents</span>
             <span className="font-mono font-bold bg-[#141414] text-white px-2 py-0.5 rounded">{agents.length}</span>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { role: 'participant', label: 'Participants', color: 'bg-blue-500' },
+              { role: 'organiser', label: 'Organisers', color: 'bg-red-500' },
+              { role: 'staff', label: 'Space Staff', color: 'bg-emerald-500' }
+            ].map(({ role, label, color }) => {
+              const count = agents.filter(a => a.role === role).length;
+              return (
+                <div key={role} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${color}`} />
+                    <span className="text-[9px] uppercase font-bold opacity-40 tracking-tight">{label}</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold">{count}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </aside>
 
       {/* Main Canvas Area */}
-      <main className="flex-1 relative overflow-hidden" ref={containerRef}>
-        <div className="absolute top-6 left-6 z-10 bg-white/90 backdrop-blur-xl border border-[#141414]/10 px-6 py-3 rounded-2xl shadow-xl">
-          <p className="text-xs font-bold flex items-center gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-            LIVE SIMULATION ENVIRONMENT
-          </p>
-        </div>
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Simulation Header */}
+        <header className="h-16 border-b border-[#141414]/10 bg-white/80 backdrop-blur-xl flex items-center justify-between px-8 z-20 shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 px-4 py-2 bg-stone-100 rounded-xl border border-[#141414]/5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+              <span className="text-xs font-bold uppercase tracking-tight">Live Simulation Environment</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-[#141414]/5">
+              <button 
+                onClick={() => setZoom(prev => Math.min(prev + 0.1, 3))}
+                className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"
+                title="Zoom In"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => setZoom(prev => Math.max(prev - 0.1, 0.5))}
+                className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"
+                title="Zoom Out"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => setZoom(1)}
+                className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all border-l border-[#141414]/5"
+                title="Reset Zoom"
+              >
+                <Maximize className="w-4 h-4" />
+              </button>
+              <div className="px-3 flex items-center border-l border-[#141414]/5">
+                <span className="text-[10px] font-mono font-bold opacity-40">{(zoom * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 relative overflow-hidden" ref={containerRef}>
 
         <div className="absolute bottom-6 right-6 z-10 bg-white/80 backdrop-blur-md border border-[#141414]/10 px-4 py-2 rounded-lg text-[10px] font-bold opacity-50">
           DRAG OBJECTS TO PLAN SPACE • DBL CLICK TO DELETE
@@ -1290,6 +1522,8 @@ export default function App() {
           height={dimensions.height}
           onMouseMove={handleStageMouseMove}
           onMouseLeave={() => setHoveredAgentId(null)}
+          scaleX={zoom}
+          scaleY={zoom}
         >
           <Layer>
             {/* Grid Lines (Subtle) */}
@@ -1299,26 +1533,6 @@ export default function App() {
             {Array.from({ length: Math.ceil(dimensions.height / 50) }).map((_, i) => (
               <Rect key={`h-${i}`} x={0} y={i * 50} width={dimensions.width} height={1} fill="#141414" opacity={0.03} />
             ))}
-
-            {/* Heatmap Layer */}
-            {showHeatmap && heatmapData.map((row, i) => 
-              row.map((val, j) => {
-                if (val === 0) return null;
-                const opacity = (val / heatmapMax) * 0.7;
-                return (
-                  <Rect
-                    key={`h-${i}-${j}`}
-                    x={j * 20}
-                    y={i * 20}
-                    width={20}
-                    height={20}
-                    fill="#ef4444"
-                    opacity={opacity}
-                    listening={false}
-                  />
-                );
-              })
-            )}
 
             {/* Space Objects */}
             {objects.map((obj) => (
@@ -1336,6 +1550,7 @@ export default function App() {
                   width={obj.width}
                   height={obj.height}
                   fill={obj.color}
+                  opacity={showHeatmap ? 0.4 : 1}
                   stroke="#141414"
                   strokeWidth={2}
                   cornerRadius={12}
@@ -1350,10 +1565,41 @@ export default function App() {
                   verticalAlign="middle"
                   fontSize={10}
                   fontStyle="bold"
-                  fill="#fff"
+                  fill={showHeatmap ? "#141414" : "#fff"}
                   letterSpacing={0.5}
                 />
-                {(obj.type === 'desk' || obj.type === 'meeting' || obj.type === 'toilet' || obj.type === 'pod') && (
+                {obj.type === 'stage' && (
+                  <Group x={obj.width / 2 - 40} y={10}>
+                    <Rect
+                      width={80}
+                      height={45}
+                      fill="#1e1e1e"
+                      cornerRadius={4}
+                      stroke="#4f46e5"
+                      strokeWidth={1}
+                    />
+                    <Rect
+                      width={70}
+                      height={35}
+                      x={5}
+                      y={5}
+                      fill="#312e81"
+                      cornerRadius={2}
+                    />
+                    <Text
+                      text="PRESENTATION"
+                      width={80}
+                      height={45}
+                      align="center"
+                      verticalAlign="middle"
+                      fontSize={6}
+                      fontStyle="bold"
+                      fill="#fff"
+                      opacity={0.6}
+                    />
+                  </Group>
+                )}
+                {(obj.type === 'desk' || obj.type === 'meeting' || obj.type === 'toilet' || obj.type === 'pod' || obj.type === 'stage') && (
                   <Group x={obj.width - 25} y={-10}>
                     <Rect
                       width={30}
@@ -1362,7 +1608,7 @@ export default function App() {
                       cornerRadius={4}
                     />
                     <Text
-                      text={`${agents.filter(a => a.currentGoalId === obj.id && a.status === 'working').length}/${obj.type === 'desk' ? 4 : obj.type === 'meeting' ? 8 : 1}`}
+                      text={`${agents.filter(a => a.currentGoalId === obj.id && a.status === 'working').length}/${obj.type === 'desk' ? 4 : obj.type === 'meeting' ? 8 : obj.type === 'stage' ? 12 : 1}`}
                       width={30}
                       height={15}
                       align="center"
@@ -1375,6 +1621,26 @@ export default function App() {
                 )}
               </Group>
             ))}
+
+            {/* Heatmap Layer - Moved after objects to be visible */}
+            {showHeatmap && heatmapData.map((row, i) => 
+              row.map((val, j) => {
+                if (val === 0) return null;
+                const opacity = Math.min(0.8, (val / heatmapMax) * 0.8);
+                return (
+                  <Rect
+                    key={`h-${i}-${j}`}
+                    x={j * 20}
+                    y={i * 20}
+                    width={20}
+                    height={20}
+                    fill="#ef4444"
+                    opacity={opacity}
+                    listening={false}
+                  />
+                );
+              })
+            )}
 
             {/* Agents */}
             {agents.map((agent) => (
@@ -1411,6 +1677,7 @@ export default function App() {
             ))}
           </Layer>
         </Stage>
+        </div>
       </main>
     </div>
   );

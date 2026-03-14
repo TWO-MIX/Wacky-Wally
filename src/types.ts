@@ -1,10 +1,6 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+export type Point = { x: number; y: number };
 
-export type ObjectType = 'desk' | 'coffee' | 'meeting' | 'printer' | 'entrance' | 'obstacle' | 'obstacle1' | 'obstacle2' | 'toilet' | 'pizza' | 'atrium' | 'pod';
-export type AgentRole = 'participant' | 'organiser' | 'staff';
+export type ObjectType = 'desk' | 'coffee' | 'meeting' | 'entrance' | 'printer' | 'toilet' | 'obstacle1' | 'obstacle2' | 'pizza' | 'atrium' | 'pod' | 'obstacle' | 'stage';
 
 export interface SpaceObject {
   id: string;
@@ -17,11 +13,28 @@ export interface SpaceObject {
   color: string;
 }
 
+export type AgentRole = 'participant' | 'organiser' | 'staff';
+
+export enum PersonaType {
+  PARTICIPANT = "PARTICIPANT",
+  ORGANISER = "ORGANISER",
+  STAFF = "STAFF",
+}
+
 export interface AgentMetrics {
-  activityLevel: number; // 1-10 (how often they move)
-  deskFrequency: number; // 0-1 (probability weight)
-  coffeeFrequency: number; // 0-1
-  meetingFrequency: number; // 0-1
+  activityLevel: number;
+  deskFrequency: number;
+  coffeeFrequency: number;
+  meetingFrequency: number;
+  speed?: number;
+  socialFrequency?: number;
+  coffeeDesire?: number;
+  focusLevel?: number;
+  deskPreference?: number;
+  meetingPreference?: number;
+  podPreference?: number;
+  pizzaPreference?: number;
+  movementSpeed?: number;
 }
 
 export interface Agent {
@@ -32,35 +45,15 @@ export interface Agent {
   y: number;
   targetX: number;
   targetY: number;
-  speed: number;
   color: string;
+  speed: number;
   personality: string;
   wackyBehavior: string;
-  status: 'walking' | 'working' | 'queueing' | 'socializing';
   metrics: AgentMetrics;
-  currentGoalId?: string;
-  waitTime: number; // frames to wait at a location
-  travelTime: number; // total time spent walking
-}
-
-export interface SimulationConfig {
-  agentCount: number;
-  wackyFactor: number;
-  isRunning: boolean;
-}
-
-export interface HackathonModifiers {
-  activityLevel: number; // Multiplier
-  movementSpeed: number; // Multiplier
-  deskPreference: number; // Multiplier
-  meetingPreference: number; // Multiplier
-  podPreference: number; // Multiplier
-  pizzaPreference: number; // Multiplier
-}
-
-export interface HackathonBehavior {
-  description: string;
-  modifiers: Record<AgentRole, HackathonModifiers>;
+  status: 'idle' | 'moving' | 'working' | 'socializing' | 'walking';
+  currentGoalId: string | null;
+  waitTime: number;
+  travelTime: number;
 }
 
 export interface ScenarioReport {
@@ -70,6 +63,30 @@ export interface ScenarioReport {
   activeTime: number;
   objectCount: number;
   objectUsage: Record<string, { totalTime: number; visitCount: number }>;
-  travelMetrics?: Record<AgentRole, number>;
+  travelMetrics: Record<AgentRole, number>;
   objects: SpaceObject[];
+}
+
+export interface HackathonBehavior {
+  description: string;
+  modifiers: {
+    participant: AgentMetrics;
+    organiser: AgentMetrics;
+    staff: AgentMetrics;
+  };
+}
+
+export interface SimulationState {
+  objects: SpaceObject[];
+  agents: Agent[];
+  vibe: string;
+  vibeMultipliers: {
+    speed: number;
+    social: number;
+    coffee: number;
+  };
+  isRunning: boolean;
+  time: number;
+  showHeatmap: boolean;
+  savedScenarios: any[];
 }
