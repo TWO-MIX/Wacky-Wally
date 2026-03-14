@@ -6,6 +6,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Stage, Layer, Rect, Circle, Text, Group } from 'react-konva';
 import { 
+  Menu,
+  X,
   Users, 
   Settings2, 
   Play, 
@@ -100,6 +102,7 @@ export default function App() {
   const [behaviorInput, setBehaviorInput] = useState("");
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const agentsRef = useRef<Agent[]>([]);
@@ -127,6 +130,20 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LOCATION, location);
   }, [location]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setDimensions({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height
+        });
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const generateHeatmapImage = () => {
     const canvas = document.createElement('canvas');
@@ -715,7 +732,14 @@ export default function App() {
   const hoveredAgent = agents.find(a => a.id === hoveredAgentId);
 
   return (
-    <div className="flex h-screen w-full bg-[#E4E3E0] text-[#141414] font-sans">
+    <div className="flex h-screen w-full bg-[#E4E3E0] text-[#141414] font-sans overflow-hidden relative">
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
       {/* Detailed Report Modal */}
       {showReport && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#141414]/40 backdrop-blur-sm animate-in fade-in duration-300">
@@ -984,7 +1008,10 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <aside className="w-80 border-r border-[#141414] bg-white flex flex-col shadow-2xl z-20">
+      <aside className={cn(
+        "fixed inset-y-0 left-0 z-50 w-80 bg-white border-r border-[#141414] flex flex-col shadow-2xl transition-transform duration-300 lg:relative lg:translate-x-0 lg:z-20",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
         <div className="p-6 border-b border-[#141414]">
           <h1 className="text-2xl font-serif italic font-bold flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-amber-500" />
@@ -1407,15 +1434,22 @@ export default function App() {
       {/* Main Canvas Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Simulation Header */}
-        <header className="h-16 border-b border-[#141414]/10 bg-white/80 backdrop-blur-xl flex items-center justify-between px-8 z-20 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 px-4 py-2 bg-stone-100 rounded-xl border border-[#141414]/5">
+        <header className="h-16 border-b border-[#141414]/10 bg-white/80 backdrop-blur-xl flex items-center justify-between px-4 lg:px-8 z-20 shrink-0">
+          <div className="flex items-center gap-2 lg:gap-4">
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-stone-100 rounded-lg lg:hidden"
+            >
+              {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+            <div className="flex items-center gap-3 px-3 lg:px-4 py-2 bg-stone-100 rounded-xl border border-[#141414]/5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-              <span className="text-xs font-bold uppercase tracking-tight">Live Simulation Environment</span>
+              <span className="text-[10px] font-bold uppercase tracking-tight hidden sm:inline">Live Simulation Environment</span>
+              <span className="text-[10px] font-bold uppercase tracking-tight sm:hidden">Live</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 lg:gap-4">
             {/* Zoom Controls */}
             <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-[#141414]/5">
               <button 
