@@ -43,12 +43,14 @@ import {
   ZoomOut,
   Maximize,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Copy
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import Markdown from 'react-markdown';
 import { Agent, SpaceObject, ObjectType, AgentRole, AgentMetrics, ScenarioReport, HackathonBehavior } from './types';
-import { generatePersona, analyzeSpace, getEnvironmentalFactors, EnvironmentalFactors, digitizeLayout, analyzeHackathonBehavior } from './services/geminiService';
+import { generatePersona, analyzeSpace, getEnvironmentalFactors, EnvironmentalFactors, digitizeLayout, analyzeHackathonBehavior, SpaceAnalysis, SpaceModification } from './services/geminiService';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -83,7 +85,7 @@ export default function App() {
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [isGenerating, setIsGenerating] = useState<AgentRole | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<SpaceAnalysis | null>(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [scenarioA, setScenarioA] = useState<ScenarioReport | null>(null);
@@ -240,10 +242,6 @@ export default function App() {
       setIsUpdatingEnv(false);
     }
   };
-
-  useEffect(() => {
-    updateEnvironment();
-  }, []);
 
   // Simulation Loop
   useEffect(() => {
@@ -580,7 +578,56 @@ export default function App() {
     setHeatmapData(Array(rows).fill(0).map(() => Array(cols).fill(0)));
   };
 
+  const applyRecommendations = () => {
+    if (!analysis || !analysis.modifications.length) return;
+
+    setObjects(prev => {
+      let next = [...prev];
+      analysis.modifications.forEach(mod => {
+        if (mod.action === 'remove' && mod.id) {
+          next = next.filter(o => o.id !== mod.id);
+        } else if (mod.action === 'move' && mod.id && mod.x !== undefined && mod.y !== undefined) {
+          next = next.map(o => o.id === mod.id ? { ...o, x: mod.x!, y: mod.y! } : o);
+        } else if (mod.action === 'add' && mod.type && mod.x !== undefined && mod.y !== undefined) {
+          const type = mod.type as ObjectType;
+          const config = {
+            desk: { width: 80, height: 50, color: '#3b82f6' },
+            coffee: { width: 60, height: 60, color: '#f59e0b' },
+            meeting: { width: 150, height: 100, color: '#8b5cf6' },
+            entrance: { width: 60, height: 40, color: '#10b981' },
+            printer: { width: 40, height: 40, color: '#64748b' },
+            obstacle1: { width: 100, height: 20, color: '#ef4444' },
+            obstacle2: { width: 20, height: 100, color: '#ef4444' },
+            toilet: { width: 50, height: 50, color: '#06b6d4' },
+            pizza: { width: 60, height: 60, color: '#f97316' },
+            atrium: { width: 250, height: 150, color: '#ec4899' },
+            pod: { width: 50, height: 50, color: '#6366f1' },
+            stage: { width: 200, height: 120, color: '#4f46e5' },
+          }[type] || { width: 50, height: 50, color: '#cccccc' };
+
+          next.push({
+            id: Math.random().toString(36).substr(2, 9),
+            type,
+            x: mod.x!,
+            y: mod.y!,
+            label: mod.label || type.charAt(0).toUpperCase() + type.slice(1),
+            ...config
+          });
+        }
+      });
+      return next;
+    });
+    setAnalysis(null);
+  };
+
+  const copyLayoutToClipboard = () => {
+    const json = JSON.stringify(objects, null, 2);
+    navigator.clipboard.writeText(json);
+    alert("Layout JSON copied to clipboard! Paste it in the chat so I can make it the default.");
+  };
+
   const runVibeCheck = async () => {
+    console.log("Starting Vibe Check analysis...");
     setIsAnalyzing(true);
     try {
       const totalTravelTime = agents.reduce((sum, a) => sum + (a.travelTime || 0), 0);
@@ -594,10 +641,12 @@ export default function App() {
         simulatedSeconds
       };
 
+      console.log("Sending data to Gemini:", { objectsCount: objects.length, agentCount: agents.length });
       const result = await analyzeSpace(objects, stats);
+      console.log("Analysis received successfully.");
       setAnalysis(result);
     } catch (error) {
-      console.error("Analysis failed", error);
+      console.error("Analysis failed:", error);
     } finally {
       setIsAnalyzing(false);
     }
@@ -861,17 +910,28 @@ export default function App() {
                   </div>
                   {analysis ? (
                     <div className="space-y-4 relative z-10">
-                      <p className="text-sm leading-relaxed italic font-medium">
-                        "{analysis}"
-                      </p>
-                      <button 
-                        onClick={runVibeCheck}
-                        disabled={isAnalyzing}
-                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[9px] font-bold uppercase flex items-center gap-2 transition-all border border-white/10"
-                      >
-                        {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                        Re-run Analysis
-                      </button>
+                      <div className="text-sm leading-relaxed prose prose-invert prose-xs max-w-none">
+                        <Markdown>{analysis.markdown}</Markdown>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={runVibeCheck}
+                          disabled={isAnalyzing}
+                          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[9px] font-bold uppercase flex items-center gap-2 transition-all border border-white/10"
+                        >
+                          {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                          Re-run Analysis
+                        </button>
+                        {analysis.modifications.length > 0 && (
+                          <button
+                            onClick={applyRecommendations}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[9px] font-bold uppercase flex items-center gap-2 transition-all shadow-lg"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Apply Recommendations ({analysis.modifications.length})
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-3 py-4 opacity-50">
@@ -1262,18 +1322,27 @@ export default function App() {
                 <button 
                   onClick={updateEnvironment}
                   disabled={isUpdatingEnv}
-                  className="px-4 bg-[#141414] text-white rounded-lg hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center"
+                  title="Fetch Environmental Data"
+                  className="px-4 bg-[#141414] text-white rounded-lg hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2 group"
                 >
-                  {isUpdatingEnv ? <Loader2 className="w-3 h-3 animate-spin" /> : <CloudSun className="w-3 h-3" />}
+                  {isUpdatingEnv ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <>
+                      <CloudSun className="w-3 h-3 group-hover:scale-110 transition-transform" />
+                      <span className="text-[9px] font-bold uppercase tracking-wider">Sync</span>
+                    </>
+                  )}
                 </button>
               </div>
+              <p className="text-[8px] opacity-40 italic">Sync environment to apply local context for the selected time.</p>
             </div>
 
             {envFactors && (
               <div className="p-3 bg-stone-100 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-1">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-[8px] opacity-40 uppercase font-bold tracking-tighter">Current Vibe</p>
+                    <p className="text-[8px] opacity-40 uppercase font-bold tracking-tighter">Simulated Vibe</p>
                     <p className="text-[10px] font-bold">{envFactors.weatherVibe}</p>
                   </div>
                   <div className="text-right">
@@ -1372,18 +1441,61 @@ export default function App() {
           {/* Vibe Check */}
           <section className="space-y-4">
             <h2 className="text-[10px] font-bold uppercase tracking-widest opacity-40">AI Insights</h2>
-            <button 
-              onClick={runVibeCheck}
-              disabled={isAnalyzing}
-              className="w-full py-3 border-2 border-dashed border-[#141414]/20 rounded-xl flex items-center justify-center gap-2 hover:border-[#141414] hover:bg-stone-50 transition-all font-bold text-sm disabled:opacity-50"
-            >
-              {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquareQuote className="w-4 h-4" />}
-              Run Vibe Check
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={runVibeCheck}
+                disabled={isAnalyzing}
+                className="flex-1 py-3 border-2 border-dashed border-[#141414]/20 rounded-xl flex items-center justify-center gap-2 hover:border-[#141414] hover:bg-stone-50 transition-all font-bold text-sm disabled:opacity-50"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Analyzing Space...
+                  </>
+                ) : (
+                  <>
+                    <MessageSquareQuote className="w-4 h-4" />
+                    Run Vibe Check
+                  </>
+                )}
+              </button>
+              <button 
+                onClick={copyLayoutToClipboard}
+                title="Copy Layout JSON"
+                className="p-3 border-2 border-dashed border-[#141414]/20 rounded-xl flex items-center justify-center hover:border-[#141414] hover:bg-stone-50 transition-all"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
             
             {analysis && (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs italic leading-relaxed text-amber-900 animate-in fade-in slide-in-from-top-2">
-                "{analysis}"
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+                  <div className="relative p-5 bg-white border border-amber-100 rounded-2xl shadow-sm">
+                    <div className="flex items-center justify-between mb-3 border-b border-amber-50 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-3 h-3 text-amber-500" />
+                        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-amber-600/60">Spatial Diagnosis</span>
+                      </div>
+                      <div className="px-1.5 py-0.5 bg-amber-50 rounded text-[8px] font-bold text-amber-600 uppercase tracking-wider border border-amber-100">
+                        Pro Analysis
+                      </div>
+                    </div>
+                    <div className="text-[11px] leading-relaxed text-stone-800 prose prose-amber prose-xs max-w-none serif italic diagnosis-content">
+                      <Markdown>{analysis.markdown}</Markdown>
+                    </div>
+                  </div>
+                </div>
+                {analysis.modifications.length > 0 && (
+                  <button
+                    onClick={applyRecommendations}
+                    className="w-full py-3 bg-[#141414] text-white rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-black transition-all flex items-center justify-center gap-2 shadow-lg group"
+                  >
+                    <Plus className="w-3 h-3 group-hover:rotate-90 transition-transform" />
+                    Implement AI Optimization ({analysis.modifications.length})
+                  </button>
+                )}
               </div>
             )}
           </section>

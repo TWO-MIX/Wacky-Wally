@@ -30,3 +30,33 @@ body {
   background: rgba(20, 20, 20, 0.2);
 }
 
+/* Markdown Styling */
+.prose-xs h1 { @apply text-base font-bold mb-2 mt-4; }
+.prose-xs h2 { @apply text-sm font-bold mb-2 mt-3; }
+.prose-xs h3 { @apply text-xs font-bold mb-1 mt-2; }
+.prose-xs p { @apply mb-2; }
+.prose-xs ul { @apply list-disc list-inside mb-2; }
+.prose-xs ol { @apply list-decimal list-inside mb-2; }
+.prose-xs li { @apply mb-1; }
+.prose-xs strong { @apply font-bold; }
+.prose-xs em { @apply italic; }
+
+.diagnosis-content p {
+  @apply text-justify;
+  text-indent: 1rem;
+}
+
+.diagnosis-content p:first-of-type {
+  text-indent: 0;
+}
+
+.diagnosis-content h2 {
+  @apply border-b border-amber-100/50 pb-1 mb-3 mt-5 text-amber-900/80;
+}
+
+/* Inverted Markdown Styling */
+.prose-invert h1, .prose-invert h2, .prose-invert h3, .prose-invert p, .prose-invert ul, .prose-invert ol, .prose-invert li, .prose-invert strong, .prose-invert em {
+  @apply text-white;
+}
+.prose-invert opacity-70 { @apply text-white/70; }
+

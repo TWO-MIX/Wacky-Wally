@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 const getAI = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -86,9 +86,10 @@ export const getEnvironmentalFactors = async (location: string, startTime: strin
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Analyze the current environment and local context for this location: ${location}. 
-      The simulation starts at ${startTime} and runs for 8 hours.
-      Consider things like current weather, time of day (starting at ${startTime}), and local culture.
+      contents: `Analyze the environment and local context for this location: ${location}. 
+      The simulation is set to start at exactly ${startTime} and runs for 8 hours.
+      IMPORTANT: Do not use the current real-world time. Use ${startTime} as the reference time for your analysis.
+      Consider things like typical weather for this location, time of day (starting at ${startTime}), and local culture.
       How would this affect people working in an office?
       
       Return a JSON object with:
@@ -118,24 +119,51 @@ export const getEnvironmentalFactors = async (location: string, startTime: strin
   };
 };
 
-export const analyzeSpace = async (objects: any[], stats: any): Promise<string> => {
+export interface SpaceModification {
+  action: 'add' | 'remove' | 'move';
+  type?: string;
+  id?: string;
+  x?: number;
+  y?: number;
+  label?: string;
+}
+
+export interface SpaceAnalysis {
+  markdown: string;
+  modifications: SpaceModification[];
+}
+
+export const analyzeSpace = async (objects: any[], stats: any): Promise<SpaceAnalysis> => {
   const ai = getAI();
   const { agentCount, usage, totalTravelTime, totalActiveTime, simulatedSeconds } = stats;
 
   if (!agentCount || agentCount === 0) {
-    return "The simulation needs active agents to generate a vibe report. Try spawning some participants first!";
+    return {
+      markdown: "The simulation needs active agents to generate a vibe report. Try spawning some participants first!",
+      modifications: []
+    };
+  }
+
+  if (!objects || objects.length === 0) {
+    return {
+      markdown: "You need to add some objects to the space before I can analyze it!",
+      modifications: []
+    };
   }
 
   if (simulatedSeconds < 300) {
-    return "The simulation hasn't run long enough to gather meaningful data. Let it run for at least 5 simulated minutes!";
+    return {
+      markdown: "The simulation hasn't run long enough to gather meaningful data. Let it run for at least 5 simulated minutes!",
+      modifications: []
+    };
   }
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-pro-preview",
       contents: `You are a high-end spatial consultant and data scientist specializing in hackathon logistics. Analyze this office layout and simulation data:
       
-      LAYOUT: ${JSON.stringify(objects.map(o => ({ type: o.type, label: o.label, x: o.x, y: o.y })))}
+      LAYOUT: ${JSON.stringify(objects.map(o => ({ id: o.id, type: o.type, label: o.label, x: o.x, y: o.y })))}
       AGENTS: ${agentCount}
       SIMULATION TIME: ${Math.floor(simulatedSeconds / 60)} minutes
       USAGE DATA (total seconds occupied and visit counts): ${JSON.stringify(usage)}
@@ -148,13 +176,57 @@ export const analyzeSpace = async (objects: any[], stats: any): Promise<string> 
       3. ACTIONABLE RECOMMENDATIONS: Specific advice on adding or removing objects to optimize flow and occupancy.
       4. BOTTLENECK IDENTIFICATION: Where are people getting stuck or waiting too long?
       
-      Keep the tone professional, insightful, and slightly witty. Use Markdown for formatting.`,
+      Keep the tone professional, insightful, and slightly witty. Use Markdown for formatting.
+      
+      Also, provide a list of concrete space modifications to implement these recommendations.
+      Return a JSON object with:
+      - markdown: The detailed report string. Ensure this is a complete, multi-paragraph analysis that addresses all points thoroughly.
+      - modifications: An array of objects with:
+        - action: 'add', 'remove', or 'move'
+        - type: (for 'add') one of ['desk', 'coffee', 'meeting', 'entrance', 'printer', 'toilet', 'obstacle1', 'obstacle2', 'pizza', 'atrium', 'pod', 'stage']
+        - id: (for 'remove' or 'move') the original object id
+        - x: (for 'add' or 'move') new x coordinate (0-800)
+        - y: (for 'add' or 'move') new y coordinate (0-600)
+        - label: (for 'add') a short name`,
+      config: {
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+        responseMimeType: "application/json",
+        maxOutputTokens: 4096,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            markdown: { 
+              type: Type.STRING,
+              description: "A comprehensive and detailed markdown report covering all 4 analysis points (Occupancy, Efficiency, Recommendations, Bottlenecks). Be thorough and professional."
+            },
+            modifications: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  action: { type: Type.STRING, enum: ['add', 'remove', 'move'] },
+                  type: { type: Type.STRING },
+                  id: { type: Type.STRING },
+                  x: { type: Type.NUMBER },
+                  y: { type: Type.NUMBER },
+                  label: { type: Type.STRING },
+                },
+                required: ["action"],
+              },
+            },
+          },
+          required: ["markdown", "modifications"],
+        },
+      },
     });
 
-    return response.text || "The vibe is... inconclusive.";
+    return JSON.parse(response.text);
   } catch (error) {
     console.error("Spatial Analysis Error:", error);
-    return "The vibe is... inconclusive.";
+    return {
+      markdown: "The vibe is... inconclusive.",
+      modifications: []
+    };
   }
 };
 
